@@ -1,33 +1,3 @@
----
-description: Use Vertigo SDK v2 to launch tokens and create liquidity pools
----
-
-# Token Factories
-
-{% hint style="info" %}
-**SDK v2 Update**: The v2 SDK introduces a simplified Factory Client that makes launching tokens and pools much easier than v1. The old SPL Token Factory and Token 2022 Factory have been unified into a single `FactoryClient`.
-{% endhint %}
-
-## Overview
-
-The Factory Client in SDK v2 provides two main capabilities:
-
-* `launchToken()` - Create a new token (SPL or Token-2022)
-* `launchTokenWithPool()` - Create a new token AND a liquidity pool in one operation
-
-The factory automatically handles:
-- Token mint creation and initialization
-- Initial supply minting
-- Metadata configuration
-- Pool creation (when using `launchTokenWithPool`)
-- Token account creation
-
-## When to use the Factory Client
-
-* **Launching new tokens**: Create SPL tokens or Token-2022 tokens
-* **Token + Pool launches**: Launch a token with immediate liquidity
-* **Simplified workflows**: The factory handles all the complexity for you
-
 ## Token Metadata
 
 All token launches require metadata:
@@ -39,6 +9,53 @@ type TokenMetadata = {
   decimals?: number;   // Number of decimals (default: 9)
   uri?: string;        // Optional URI to JSON metadata
 };
+```
+
+
+### Creating Token Metadata Helper
+
+The SDK provides a `createTokenMetadata()` helper function that validates and formats your token metadata:
+
+```typescript
+import { createTokenMetadata } from "@vertigo-amm/vertigo-sdk";
+
+// Create and validate token metadata
+const metadata = createTokenMetadata(
+  "My Amazing Token",                        // name (max 32 characters)
+  "MAT",                                     // symbol (max 10 characters)
+  "https://example.com/token-metadata.json"  // URI to off-chain metadata
+);
+```
+
+The helper automatically:
+- ✅ Validates name length (1-32 characters)
+- ✅ Validates symbol length (1-10 characters)
+- ✅ Trims whitespace from all fields
+- ✅ Uppercases the symbol
+- ✅ Ensures URI is provided
+- ✅ Throws clear error messages if validation fails
+
+**Example with factory:**
+
+```typescript
+import { Vertigo, createTokenMetadata } from "@vertigo-amm/vertigo-sdk";
+
+const vertigo = await Vertigo.load({ connection, wallet });
+
+// Create validated metadata
+const metadata = createTokenMetadata(
+  "My Launch Token",
+  "MLT",
+  "https://example.com/metadata.json"
+);
+
+// Use with token factory
+const result = await vertigo.factory.launchTokenWithPool({
+  metadata,
+  supply: 1_000_000_000,
+  initialMarketCap: 50 * LAMPORTS_PER_SOL,
+  royaltiesBps: 250,
+});
 ```
 
 ## Example: Launch a simple token
@@ -334,3 +351,4 @@ try {
 * Always test on devnet before launching on mainnet
 * Consider using `launchTime` for coordinated launches
 * Token-2022 offers advanced features but requires compatible wallets
+* Use the `createTokenMetadata()` helper to ensure metadata is properly validated
