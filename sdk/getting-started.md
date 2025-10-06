@@ -1,15 +1,19 @@
 ---
-description: Getting started with the Vertigo SDK
+description: Getting started with the Vertigo SDK v2
 ---
 
 # Getting started
 
 ## Installation
 
-To install the Vertigo SDK, use your preferred package installer
+To install the Vertigo SDK v2, use your preferred package installer:
 
-```
+```bash
 npm install @vertigo-amm/vertigo-sdk
+# or
+yarn add @vertigo-amm/vertigo-sdk
+# or
+bun install @vertigo-amm/vertigo-sdk
 ```
 
 ## Dependencies
@@ -22,15 +26,35 @@ Make sure you have the following dependencies installed:
 
 Install them with:
 
-```
+```bash
 npm install @coral-xyz/anchor @solana/web3.js @solana/spl-token
 ```
 
 ## Basic setup
 
+### Read-only mode (no wallet required)
+
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
 import { Connection } from "@solana/web3.js";
+
+// Connect to Solana
+const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+// Initialize Vertigo SDK in read-only mode
+const vertigo = await Vertigo.loadReadOnly(connection, "devnet");
+
+console.log("Vertigo SDK initialized (read-only)");
+
+// Get pool data, quotes, etc.
+const pools = await vertigo.pools.getPools();
+```
+
+### With wallet (full features)
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, Keypair } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 
 // Connect to Solana
@@ -39,70 +63,90 @@ const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 // Load a wallet from a local file, or however you want to load a wallet
 const walletKeypair = anchor.Wallet.local();
 
-// Initialize Anchor provider
-const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-// Initialize Vertigo SDK
-const vertigo = new VertigoSDK(provider);
+// Initialize Vertigo SDK with wallet
+const vertigo = await Vertigo.load({
+  connection,
+  wallet: walletKeypair,
+  network: "devnet",
+});
 
 console.log("Vertigo SDK initialized");
 
+// Execute swaps, create pools, etc.
 ```
 
 
 
 ## Where to go from here
 
-The next few pages in these docs cover basic interactions with Vertigo pools such as [**buying**](buy-tokens.md), [**selling**](sell-tokens.md), and [**claiming**](claim-royalty-fees.md) royalties. If you plan to launch tokens, it is recommended to take a look at [**Token Factories**](token-factories.md), and explore [**customizing token factories**](../designing-token-factories.md).
+The next few pages cover basic interactions with Vertigo pools such as [**swapping tokens**](buy-tokens.md), and [**claiming**](claim-royalty-fees.md) royalties. If you plan to launch tokens, it is recommended to take a look at [**Token Factories**](token-factories.md), and explore [**customizing token factories**](../designing-token-factories.md).
 
+## SDK v2 Architecture
 
+The v2 SDK is organized into specialized client modules:
 
-Below is a brief overview of the various methods in the Vertigo SDK. More details on how to use these is provided in their respective pages in the docs.
+### Core Clients
 
-## SDK methods
+**Swap Client** (`vertigo.swap`)
+* `getQuote()` - Get swap quotes with slippage calculation
+* `swap()` - Execute token swaps (automatically detects buy/sell direction)
+* `simulateSwap()` - Simulate swaps before executing
+* `buildSwapTransaction()` - Build swap transactions manually
 
-**Buy methods**
+**Pool Client** (`vertigo.pools`)
+* `getPool()` - Fetch pool data from chain
+* `getPools()` - Fetch multiple pools
+* `findPoolsByMints()` - Find pools by token pair
+* `getPoolAddress()` - Get pool PDA address
+* `createPool()` - Create new liquidity pools
+* `getPoolStats()` - Get pool statistics
 
-* `vertigo.buy()`
-* `vertigo.buildBuyInstruction()`
-* `vertigo.quoteBuy()`
+**Pool Authority Client** (`vertigo.poolAuthority`)
+* Advanced pool management for authorized users
+* Create pools with custom configurations
 
-**Sell methods**
+**Factory Client** (`vertigo.factory`)
+* `launchToken()` - Launch new tokens
+* `launchTokenWithPool()` - Launch token and create pool in one transaction
 
-* `vertigo.sell()`
-* `vertigo.buildSellInstruction()`&#x20;
-* `vertigo.quoteSell()`
+**API Client** (`vertigo.api`)
+* `getPoolStats()` - Get pool statistics and analytics
+* `getTrendingPools()` - Get trending pools by timeframe
+* `getTokenInfo()` - Get token metadata and info
+* `subscribeToPool()` - Real-time pool updates via WebSocket
 
-**Claim methods**
+### Utility Functions
 
-* `vertigo.claim()`
-* `vertigo.buildClaimInstruction()`
+The SDK includes rich utilities for common operations:
 
-**Pool methods**
+```typescript
+import {
+  formatTokenAmount,
+  parseTokenAmount,
+  getOrCreateATA,
+  estimatePriorityFee,
+  retry,
+  getExplorerUrl,
+  sendTransactionWithRetry,
+} from "@vertigo-amm/vertigo-sdk";
+```
 
-* `vertigo.launchPool()`
-* `vertigo.buildLaunchInstruction`
+## Migrating from v1
 
+If you're upgrading from SDK v1, the legacy `VertigoSDK` class is still available for backwards compatibility:
 
+```typescript
+import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
+import * as anchor from "@coral-xyz/anchor";
 
-### Factory methods
+const provider = new anchor.AnchorProvider(connection, wallet);
+const sdk = new VertigoSDK(provider);
+```
 
-Factories are useful for deploying pools with re-usable configuration. A factory needs to be initialized before a token can be launched from it. Factories can only be launched by the account that initialized it.
+However, we **strongly recommend** migrating to the new `Vertigo` client for:
+- 50% less code on average
+- Better performance and type safety
+- Powerful new features (simulation, API client, utilities)
+- Cleaner, more intuitive APIs
 
-**SPL Token Factory methods**
-
-SPL token factories are for pools where MintB uses the SPL token program
-
-* `vertigo.SPLTokenFactory.buildInitializeInstruction()`
-* `vertigo.SPLTokenFactory.initialize()`
-* `vertigo.SPLTokenFactory.buildLaunchInstruction()`
-* `vertigo.SPLTokenFactory.launch()`
-
-**Token 2022 Factory methods**
-
-Token 2022 factories are for pools where MintB uses the Token-2022 token program
-
-* `vertigo.Token2022Factory.buildInitializeInstruction()`
-* `vertigo.Token2022Factory.initialize()`
-* `vertigo.Token2022Factory.buildLaunchInstruction()`
-* `vertigo.Token2022Factory.launch()`
+See the [**Migration Guide**](migration-guide.md) for complete step-by-step instructions, code comparisons, and a migration checklist.

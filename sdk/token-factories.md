@@ -1,279 +1,336 @@
 ---
-description: Use Vertigo to create pool factories and launch pools from those factories
+description: Use Vertigo SDK v2 to launch tokens and create liquidity pools
 ---
 
 # Token Factories
 
-{% hint style="warning" %}
-Vertigo exposes two default factory programs called **SPL Token Factory** and **Token 2022 Factory**. These factories mainly serve as a template. We encourage you to build your own factory to accomodate your specific launchpad needs.
+{% hint style="info" %}
+**SDK v2 Update**: The v2 SDK introduces a simplified Factory Client that makes launching tokens and pools much easier than v1. The old SPL Token Factory and Token 2022 Factory have been unified into a single `FactoryClient`.
 {% endhint %}
 
 ## Overview
 
-Factories are useful for when deploying many pools that use the same configuration. **A factory must first be initialized before a token can be launched from it**. Factories can only be launched by the account that initialized it. Below are the following SDK methods related to factories.
+The Factory Client in SDK v2 provides two main capabilities:
 
-**SPL Token Factory methods**
+* `launchToken()` - Create a new token (SPL or Token-2022)
+* `launchTokenWithPool()` - Create a new token AND a liquidity pool in one operation
 
-SPL token factories are for pools where MintB uses the SPL token program
+The factory automatically handles:
+- Token mint creation and initialization
+- Initial supply minting
+- Metadata configuration
+- Pool creation (when using `launchTokenWithPool`)
+- Token account creation
 
-* `vertigo.SPLTokenFactory.buildInitializeInstruction()`
-* `vertigo.SPLTokenFactory.initialize()`
-* `vertigo.SPLTokenFactory.buildLaunchInstruction`
-* `vertigo.SPLTokenFactory.launch()`
+## When to use the Factory Client
 
-**Token 2022 Factory methods**
+* **Launching new tokens**: Create SPL tokens or Token-2022 tokens
+* **Token + Pool launches**: Launch a token with immediate liquidity
+* **Simplified workflows**: The factory handles all the complexity for you
 
-Token 2022 factories are for pools where MintB uses the Token-2022 token program
+## Token Metadata
 
-* `vertigo.Token2022Factory.buildInitializeInstruction()`
-* `vertigo.Token2022Factory.initialize()`
-* `vertigo.Token2022Factory.buildLaunchInstruction`
-* `vertigo.Token2022Factory.launch()`
-
-
-
-## When to use each method
-
-The `instruction()` methods are best if you are integrating into frontend applications or require more control over transactions. If running scripts/bots you might elect to use the other methods for simplicity.
-
-
-
-## Initialization Parameters
-
-* payer - the key pair that is paying for the transaction
-* owner - the key pair that will own the factory
-* mintA - the public key of the MintA token
-* **params**
-  * **shift** - the virtual SOL (in lamports) to deploy the pool with. The initial "market cap" is defined by shift / 2. For example, if you set shift to 100 SOL, then the starting market cap will be 50 SOL.
-  * **initialTokenReserves** - the token supply for mint B
-  * **feeParams**
-    * **normalizationPeriod** - the number of slots in which fees will decay from 100% to zero. Defaults to 10.
-    * **decay** - the rate of decay. Defaults to 2.0
-    * **royaltiesBps** - royalties on trading volume in basis points. Defaults to 50
-  * **tokenParams**
-    * **decimals** - the number of decimals that MintB tokens should use
-    * **mutable** - whether the mint’s authorities (and extensions) can still be changed after creation
-  * **nonce** - a number used as an identifier for the factory. Useful if creating multiple factories under the same owner
-
-
-
-## Launch Parameters
-
-* payer - the key pair that will pay for the launch transaction
-* owner - the key pair that will own the pool
-* mintA - the public key of the MintA token
-* mintB - the public key fo the MintB token
-* mintBAuthority - the key pair for the mint authority of MintB
-* tokenProgramA - the public key of the token program for MintA
-* params
-  * tokenParams
-    * name - the display name for the token to be launched
-    * symbol - the symbol to be used for the token
-    * uri - the uri that contains the JSON metadata for the token
-  * **reference** - the reference slot for fee calculations. Defaults to 0
-  * **royaltiesBps** - royalties on trading volume in basis points. Defaults to 50
-  * **privilegedSwapper** - (optional) public key of the address that can swap without fees. Default is none.
-  * **nonce** - the factory identifier to be used for token launch. This must match the nonce of a previously initialized factory
-
-## Example: Initialize a factory
-
-The below example shows how to initialize an SPL token factory.&#x20;
-
-If you wish to launch a Token-2022 token factory, then the only change needed is to replace `vertigo.SPLTokenFactory.initialize()` with `vertigo.Token2022Factory.initialize()`
+All token launches require metadata:
 
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+type TokenMetadata = {
+  name: string;        // Token name (e.g., "My Token")
+  symbol: string;      // Token symbol (e.g., "MTK")
+  decimals?: number;   // Number of decimals (default: 9)
+  uri?: string;        // Optional URI to JSON metadata
+};
+```
+
+## Example: Launch a simple token
+
+Create a token without a pool:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 
-import { NATIVE_MINT } from "@solana/spl-token";
-import { InitializeParams } from "../src/types/generated/token_2022_factory";
-
 async function main() {
-  // Connect to Solana
-  const connection = new Connection(
-    "https://api.devnet.solana.com",
-    "confirmed"
-  );
-  // wallet is loaded from local machine
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
   const walletKeypair = anchor.Wallet.local();
 
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
 
-  // initialize Vertigo SDK
-  const vertigo = new VertigoSDK(provider);
-
-  const DECIMALS = 6;
-
-  const params: InitializeParams = {
-    // virtual SOL for pools i.e. 100 virtual SOL
-    shift: new anchor.BN(LAMPORTS_PER_SOL).muln(100),
-    // initial token reserves i.e. 1 billion tokens
-    initialTokenReserves: new anchor.BN(1_000_000_000).muln(10 ** DECIMALS),
-    // fee parameters
-    feeParams: {
-      normalizationPeriod: new anchor.BN(20),
-      decay: 10,
-      royaltiesBps: 100,
+  // Launch a standard SPL token
+  const { signature, mintAddress } = await vertigo.factory.launchToken({
+    metadata: {
+      name: "My Token",
+      symbol: "MTK",
+      decimals: 9,
+      uri: "https://example.com/token-metadata.json", // Optional
     },
-    // token parameters
-    tokenParams: {
-      decimals: DECIMALS,
-      mutable: true,
+    supply: 1_000_000, // 1 million tokens (will be multiplied by 10^decimals)
+    useToken2022: false, // Use SPL token (default)
+  });
+
+  console.log(`Token created: ${mintAddress.toBase58()}`);
+  console.log(`Transaction: ${signature}`);
+}
+
+main();
+```
+
+## Example: Launch a Token-2022 token
+
+The same API works for Token-2022:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  // Launch a Token-2022 token
+  const { signature, mintAddress } = await vertigo.factory.launchToken({
+    metadata: {
+      name: "My Token 2022",
+      symbol: "MT22",
+      decimals: 6,
     },
+    supply: 10_000_000, // 10 million tokens
+    useToken2022: true, // Use Token-2022 program
+  });
+
+  console.log(`Token-2022 created: ${mintAddress.toBase58()}`);
+  console.log(`Transaction: ${signature}`);
+}
+
+main();
+```
+
+## Example: Launch token with liquidity pool
+
+Create a token and pool in one operation:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  // Launch token with liquidity pool
+  const result = await vertigo.factory.launchTokenWithPool({
+    metadata: {
+      name: "My Launch Token",
+      symbol: "MLT",
+      decimals: 9,
+      uri: "https://example.com/metadata.json",
+    },
+    supply: 1_000_000_000, // 1 billion tokens
+    initialMarketCap: 50 * LAMPORTS_PER_SOL, // 50 SOL market cap
+    royaltiesBps: 250, // 2.5% trading fees
+    useToken2022: false,
+  });
+
+  console.log(`Token created: ${result.mintAddress.toBase58()}`);
+  console.log(`Pool created: ${result.poolAddress.toBase58()}`);
+  console.log(`Token transaction: ${result.tokenSignature}`);
+  console.log(`Pool transaction: ${result.poolSignature}`);
+}
+
+main();
+```
+
+## Example: Launch with custom timing
+
+Schedule a launch for a specific time:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  // Launch 24 hours from now
+  const launchTime = new anchor.BN(Math.floor(Date.now() / 1000) + 86400);
+
+  const result = await vertigo.factory.launchTokenWithPool({
+    metadata: {
+      name: "Scheduled Launch Token",
+      symbol: "SLT",
+      decimals: 9,
+    },
+    supply: 1_000_000_000,
+    initialMarketCap: 100 * LAMPORTS_PER_SOL,
+    royaltiesBps: 100, // 1% fees
+    launchTime, // Unix timestamp
+  });
+
+  console.log(`Token will launch at: ${new Date(launchTime.toNumber() * 1000)}`);
+  console.log(`Pool address: ${result.poolAddress.toBase58()}`);
+}
+
+main();
+```
+
+## Parameters Reference
+
+### LaunchTokenParams
+
+* **metadata** - Token metadata object
+  * **name** - Token display name
+  * **symbol** - Token symbol/ticker
+  * **decimals** - Number of decimals (default: 9)
+  * **uri** - Optional metadata URI
+* **supply** - Total token supply in whole units
+* **useToken2022** - Use Token-2022 instead of SPL (default: false)
+
+### LaunchTokenWithPoolParams
+
+All of `LaunchTokenParams`, plus:
+
+* **initialMarketCap** - Starting market cap in lamports
+* **royaltiesBps** - Trading fee in basis points (e.g., 250 = 2.5%)
+* **launchTime** - Optional Unix timestamp for scheduled launch
+
+## Migration from v1
+
+### v1 (Old) - SPL Token Factory
+```typescript
+// Initialize factory
+await vertigo.SPLTokenFactory.initialize({
+  payer,
+  owner,
+  mintA: NATIVE_MINT,
+  params: {
+    shift: new anchor.BN(100 * LAMPORTS_PER_SOL),
+    initialTokenReserves: new anchor.BN(1_000_000_000),
+    feeParams: { /* ... */ },
+    tokenParams: { /* ... */ },
     nonce: 0,
-  };
+  },
+});
 
-  const signature = await vertigo.SPLTokenFactory.initialize({
-    payer: walletKeypair,
-    owner: walletKeypair,
-    mintA: NATIVE_MINT,
-    params: params,
-  });
-
-  console.log(`Signature: ${signature}`);
-}
-
-await main();
-
+// Launch from factory
+await vertigo.SPLTokenFactory.launch({
+  payer,
+  owner,
+  mintA: NATIVE_MINT,
+  mintB,
+  mintBAuthority,
+  tokenProgramA: TOKEN_PROGRAM_ID,
+  params: { /* ... */ },
+});
 ```
 
-
-
-## Example: Launch a factory
-
+### v2 (New) - Unified Factory
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
-import {
-  NATIVE_MINT,
-  TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
-import { LaunchParams } from "../src/types/generated/token_2022_factory";
-
-async function main() {
-  // Connect to Solana
-  const connection = new Connection("http://127.0.0.1:8899", "confirmed");
-
-  // wallet is loaded from local machine
-  const walletKeypair = anchor.Wallet.local();
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  // if performing a dev buy, load the dev keypair
-  // you'll need to create the token accounts for the dev
-  // and fund the Token Wallet with the dev SOL (or mintA if using another token)
-  const dev = ...
-
-  const vertigo = new VertigoSDK(provider);
-
-  const tokenParams = {
-    name: "Test Token",
-    symbol: "TEST",
-    uri: "https://test.com/metadata.json",
-  };
-
-  const mintB = Keypair.generate();
-  const mintBAuthority = Keypair.generate();
-
-  const params: LaunchParams = {
-    tokenConfig: tokenParams,
-    reference: new anchor.BN(0),
-    privilegedSwapper: null,
-    nonce: 0
-  };
-
-  const { signature, poolAddress } = await vertigo.SPLTokenFactory.launch({
-    payer: walletKeypair.payer,
-    owner: walletKeypair,
-    mintA: NATIVE_MINT,
-    mintB: mintB,
-    mintBAuthority: mintBAuthority,
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    params,
-    amount: new anchor.BN(LAMPORTS_PER_SOL),
-    limit: new anchor.BN(0),
-    dev,
-    devTaA: new PublicKey("<dev-token-account-a>"),
-  });
-
-  console.log(`Signature: ${signature}`);
-  console.log(`Pool address: ${poolAddress}`);
-  console.log("Mint address: ", mintB.publicKey.toBase58());
-}
-
-await main();
-
-
+// No initialization needed - just launch!
+const result = await vertigo.factory.launchTokenWithPool({
+  metadata: {
+    name: "My Token",
+    symbol: "MTK",
+    decimals: 9,
+  },
+  supply: 1_000_000_000,
+  initialMarketCap: 50 * LAMPORTS_PER_SOL,
+  royaltiesBps: 250,
+});
 ```
 
-## Using the instruction builder methods
+## Key Improvements in v2
 
-You may want to only build the transaction instructions and handle sending the transaction manually. The function parameters are the same in both cases.
+1. **No initialization required** - Just launch directly
+2. **Simplified parameters** - No need to specify token programs, authorities, etc.
+3. **Unified interface** - Same API for SPL and Token-2022
+4. **Automatic handling** - Token accounts, minting, etc. handled automatically
+5. **Better error messages** - Clear, actionable error messages
+6. **Type safety** - Full TypeScript support with IntelliSense
 
-For initialization:
+## Advanced: Pool Authority Client
 
-* replace `initialize` with `buildInitializeInstruction`&#x20;
-
-For launch:
-
-* replace `launch` with `buildLaunchInstruction`&#x20;
-
-
-
-#### Examples
-
-Initialize with `buildInitializeInstruction`
+For advanced pool management and custom configurations, use the Pool Authority Client:
 
 ```typescript
-  const initIx = await vertigo.SPLTokenFactory.buildInitializeInstruction({
-    payer: walletKeypair,
-    owner: walletKeypair,
-    mintA: NATIVE_MINT,
-    params: params,
-  });
+import { PoolAuthority } from "@vertigo-amm/vertigo-sdk";
 
-  const tx = new Transaction().add(initIx);
+const poolAuth = await PoolAuthority.load({
+  connection,
+  wallet,
+});
 
-  // the second argument is to pass the required signers
-  const signature = await provider.sendAndConfirm(tx, [
-      suite.owner,
-      suite.payer,
-    ]);
-
+// Create pools with custom authority settings
+// Note: This is for advanced use cases
 ```
 
-Launch with `buildLaunchInstruction` Note that this will return an object with `launchInstructions` and `devBuyInstructions` field which you can add to your final transaction.
+{% hint style="warning" %}
+The Pool Authority Client is for advanced users who need fine-grained control over pool creation. Most users should use the standard Factory Client's `launchTokenWithPool()` method.
+{% endhint %}
+
+## Custom Token Factories
+
+While Vertigo provides default factories, you can build custom factories for your specific launchpad needs:
+
+1. Use the Factory Client as a starting point
+2. Extend functionality with custom validation
+3. Add custom metadata or launch mechanics
+4. Integrate with your own smart contracts
+
+For guidance on building custom factories, see [Designing Token Factories](../designing-token-factories.md).
+
+## Error Handling
 
 ```typescript
-  const launchIx = await vertigo.SPLTokenFactory.buildLaunchInstruction({
-    payer: walletKeypair.payer,
-    owner: walletKeypair,
-    mintA: NATIVE_MINT,
-    mintB: mintB,
-    mintBAuthority: mintBAuthority,
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    params: launchCfg,
-    amount: new anchor.BN(LAMPORTS_PER_SOL),
-    limit: new anchor.BN(0),
-    dev,
-    devTaA: new PublicKey("<dev-token-account-a>"),
+try {
+  const result = await vertigo.factory.launchTokenWithPool({
+    metadata: { name: "My Token", symbol: "MTK" },
+    supply: 1_000_000,
+    initialMarketCap: 50 * LAMPORTS_PER_SOL,
+    royaltiesBps: 250,
   });
-
-  const tx = new Transaction()
-  
-  tx.add(...launchIx.launchInstructions);
-  
-  if (launchIx.devBuyInstructions) {
-    tx.add(...launchIx.devBuyInstructions);
+  console.log(`Success: ${result.poolAddress.toBase58()}`);
+} catch (error) {
+  if (error.message.includes("Wallet not connected")) {
+    console.error("Please connect a wallet first");
+  } else if (error.message.includes("Insufficient funds")) {
+    console.error("Not enough SOL to create token and pool");
+  } else {
+    console.error(`Launch failed: ${error.message}`);
   }
-
-  // the second argument is to pass the required signers
-  const txHash = provider.sendAndConfirm(launchTx, [
-      owner,
-      payer,
-      mintAuthority,
-      mint,
-      user // if performing a dev buy
-    ]);
+}
 ```
+
+## Tips
+
+* The initial supply is minted to your wallet's associated token account
+* Market cap is the initial virtual SOL backing the pool
+* Royalties are trading fees that accrue to the pool owner
+* Always test on devnet before launching on mainnet
+* Consider using `launchTime` for coordinated launches
+* Token-2022 offers advanced features but requires compatible wallets

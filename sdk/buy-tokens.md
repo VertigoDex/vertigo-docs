@@ -1,206 +1,296 @@
 ---
-description: How to buy tokens from Vertigo pools
+description: How to swap tokens using Vertigo pools
 ---
 
-# Buy Tokens
+# Swap Tokens
 
 ## Overview
 
-The SDK provides two methods for buying from Vertigo pools:
+The SDK v2 provides a unified swap interface that automatically detects whether you're buying or selling:
 
-* `buildBuyInstruction`  Build the buy instruction and send the transaction manually
-* `buy`  Build and send the buy transaction in one function call
-* `quoteBuy` For simulating a buy transaction
+* `swap()` - Execute token swaps in one function call
+* `getQuote()` - Get swap quotes with slippage calculation
+* `simulateSwap()` - Simulate swaps before executing
+* `buildSwapTransaction()` - Build swap transactions manually for advanced use cases
 
 ## When to use each method
 
-* `buy`  is simpler to use and good for scripting use cases
-* `buildBuyInstruction`  is useful when integrating into frontend applications or when you require more control (such as building multi-instruction transactions
+* `swap()` is the simplest approach and recommended for most use cases
+* `getQuote()` should be called before swapping to show users expected output
+* `simulateSwap()` is useful for testing and error checking
+* `buildSwapTransaction()` is for advanced users who need full control over transaction building
 
 ## Prerequisites
 
-* The `userTaA` account must be funded with MintA  in order for the transaction to succeed, or else the transaction will throw an InsufficientFunds error
-* The token programs must match the token program of their respective mint, or the transaction will throw an invalid token account error&#x20;
+* The input token account must have sufficient balance
+* You must have a wallet configured (use `Vertigo.load()` instead of `Vertigo.loadReadOnly()`)
 
-## Required Parameters
+## Parameters
 
-* **owner** - the public key of the of pool creator/owner
-* **user** - the key pair of the user performing the buy
-* **mintA** - the public key of MintA
-* **mintB** - the public key of MintB
-* **userTaA** - the pubic key of the user's token account for MintA
-* **userTaB** - the public key of the user's token account for MintB
-* **tokenProgramA** - the public key of the token program for MintA
-* **tokenProgramB** - the public key of the token program for MintB
-* **amount** - the amount of MintA to be spent purchasing MintB tokens
-* **limit** - the minimum amount of MintB you are willing to accept ( set to 0 for no limit )
+**For `getQuote()`:**
+* **inputMint** - The public key of the input token
+* **outputMint** - The public key of the output token
+* **amount** - The amount of input tokens to swap (in base units)
+* **slippageBps** - (Optional) Slippage tolerance in basis points (default: 50 = 0.5%)
 
-## Using buy() and quoteBuy()
+**For `swap()`:**
+* **inputMint** - The public key of the input token
+* **outputMint** - The public key of the output token
+* **amount** - The amount of input tokens to swap (in base units)
+* **options** - (Optional) Configuration object:
+  * **slippageBps** - Slippage tolerance in basis points (default: 50 = 0.5%)
+  * **priorityFee** - Priority fee strategy: "auto", "low", "medium", "high", or a specific amount
+  * **wrapSol** - Auto-wrap SOL if needed (default: true)
+  * **simulateFirst** - Simulate before executing (default: true)
 
-The example below shows to perform a quoteBuy and buy tokens from an existing SOL token pool.
+## Example: Basic swap with quote
+
+This example shows how to get a quote and execute a swap from SOL to a custom token.
 
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import {
-  Connection,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-} from "@solana/web3.js";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { NATIVE_MINT } from "@solana/spl-token";
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 async function main() {
-
   // Connect to Solana
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
-  // Load a wallet from a local file, or however you want to load a wallet
+  // Load wallet
   const walletKeypair = anchor.Wallet.local();
 
-  // Initialize Anchor provider
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
   // Initialize Vertigo SDK
-  const vertigo = new VertigoSDK(provider);
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
 
-  // address of the pool owner
-  const owner = new PublicKey("<owner-address>");
-  
-  // addresses of the mints in the pool
-  const mintA = NATIVE_MINT;
-  const mintB = new PublicKey("<mint-address>"); 
-  
-  // Load the Keypair of the user performing the buy transaction
-  // The user's token accounts for mintA and mintB should already
-  // be created and the Token Account for mintA should be funded
-  // before performing the transaction
-  const user = ...
+  // Define the swap
+  const inputMint = NATIVE_MINT; // SOL
+  const outputMint = new PublicKey("<token-mint-address>");
+  const amount = LAMPORTS_PER_SOL; // 1 SOL
 
-  /** (Optional) fetch a buy quote  */
-  const quote = await vertigo.quoteBuy({
-    params: {
-      amount: new anchor.BN(LAMPORTS_PER_SOL).muln(1),
-      limit: new anchor.BN(0),
+  // Get a quote first
+  const quote = await vertigo.swap.getQuote({
+    inputMint,
+    outputMint,
+    amount,
+    slippageBps: 50, // 0.5% slippage tolerance
+  });
+
+  console.log("Quote:");
+  console.log(`  Input: ${quote.inputAmount} (${amount / LAMPORTS_PER_SOL} SOL)`);
+  console.log(`  Expected output: ${quote.outputAmount}`);
+  console.log(`  Minimum received: ${quote.minimumReceived}`);
+  console.log(`  Price impact: ${quote.priceImpact}%`);
+
+  // Execute the swap
+  const result = await vertigo.swap.swap({
+    inputMint,
+    outputMint,
+    amount,
+    options: {
+      slippageBps: 100, // 1% slippage for execution
+      priorityFee: "auto", // Automatically calculate priority fee
+      wrapSol: true, // Auto-wrap SOL if needed
     },
-      owner: owner,
-      user: user,
-      mintA,
-      mintB,
-    })
-  
-  console.log({
-    amountB: quote.amountB.toString(),
-    feeA: quote.feeA.toString(),
   });
 
-  // (optional) check token balance before the transaction
-  const beforeBalance = await connection.getTokenAccountBalance(
-    new PublicKey("<user-taB-address>")
-  );
-
-  // execute the buy transaction
-  const tx = await vertigo.buy({
-    owner,
-    user,
-    mintA,
-    mintB,
-    userTaA: new PublicKey("<user-taA-address>"),
-    userTaB: new PublicKey("<user-taB-address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    tokenProgramB: TOKEN_2022_PROGRAM_ID,
-    params: {
-      amount: new anchor.BN(LAMPORTS_PER_SOL).muln(1),
-      limit: new anchor.BN(0),
-    }
-  });
-  
-  console.log(`Buy tx: ${tx}`);
-
-  // (optional) check token balance after the transaction
-  const afterBalance = await connection.getTokenAccountBalance(
-    new PublicKey("<user-taB-address>")
-  );
-
-  console.log(
-    `Tokens purchased: ${
-      Number(afterBalance.value.amount) - Number(beforeBalance.value.amount)
-    }`
-  );
-  
+  console.log(`Swap successful!`);
+  console.log(`  Signature: ${result.signature}`);
+  console.log(`  Input amount: ${result.inputAmount}`);
+  console.log(`  Output amount: ${result.outputAmount}`);
 }
 
 main();
 ```
 
+## Example: Selling tokens back to SOL
 
-
-## Using buildBuyInstruction()
+The same `swap()` method works in reverse - just swap the input and output mints:
 
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import {
-  Connection,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-} from "@solana/web3.js";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { NATIVE_MINT } from "@solana/spl-token";
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 async function main() {
-
-  // Connect to Solana
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-
-  // Load a wallet from a local file, or however you want to load a wallet
   const walletKeypair = anchor.Wallet.local();
 
-  // Initialize Anchor provider
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  // Initialize Vertigo SDK
-  const vertigo = new VertigoSDK(provider);
-
-  // address of the pool owner
-  const owner = new PublicKey("<owner-address>");
-  
-  // addresses of the mints in the pool
-  const mintA = NATIVE_MINT;
-  const mintB = new PublicKey("<mint-address>"); 
-  
-  // Load the Keypair of the user performing the buy transaction
-  // The user's token accounts for mintA and mintB should already
-  // be created and the Token Account for mintA should be funded
-  // before performing the transaction
-  const user = ...
-  
-  // build the instruction(s) for the buy transaction
-  // Instructions are returned as an array as the method
-  // will add an instruction to create userTaB if it doesn't exist
-  const buyIx = await vertigo.buildBuyInstruction({
-    owner,
-    user,
-    mintA,
-    mintB,
-    userTaA: new PublicKey("<user-taA-address>"),
-    userTaB: new PublicKey("<user-taB-address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    tokenProgramB: TOKEN_2022_PROGRAM_ID,
-    params: {
-      // amount of MintA to spend on MintB tokens
-      amount: new anchor.BN(LAMPORTS_PER_SOL).muln(1),
-      limit: new anchor.BN(0),
-    }
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
   });
-  
-  const tx = new Transaction().add(...buyIx);
 
-  // the second argument is to pass the required signer
-  const txHash = await provider.sendAndConfirm(tx, [user]);
+  const tokenMint = new PublicKey("<token-mint-address>");
+  const DECIMALS = 6;
   
-  console.log(txHash)
+  // Sell 100,000 tokens
+  const sellAmount = 100_000 * (10 ** DECIMALS);
+
+  // Get quote
+  const quote = await vertigo.swap.getQuote({
+    inputMint: tokenMint,     // Selling tokens
+    outputMint: NATIVE_MINT,  // For SOL
+    amount: sellAmount,
+    slippageBps: 50,
+  });
+
+  console.log(`Selling ${100_000} tokens for ~${quote.outputAmount / 1e9} SOL`);
+
+  // Execute the swap
+  const result = await vertigo.swap.swap({
+    inputMint: tokenMint,
+    outputMint: NATIVE_MINT,
+    amount: sellAmount,
+    options: {
+      slippageBps: 100,
+      priorityFee: "auto",
+    },
+  });
+
+  console.log(`Sold tokens for ${result.outputAmount / 1e9} SOL`);
+  console.log(`Transaction: ${result.signature}`);
+}
+
+main();
+```
+
+## Example: Simulating a swap
+
+Use `simulateSwap()` to test a swap before executing:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+import { NATIVE_MINT } from "@solana/spl-token";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  const inputMint = NATIVE_MINT;
+  const outputMint = new PublicKey("<token-mint-address>");
+  const amount = LAMPORTS_PER_SOL;
+
+  // Simulate first
+  const simulation = await vertigo.swap.simulateSwap({
+    inputMint,
+    outputMint,
+    amount,
+    options: { slippageBps: 100 },
+  });
+
+  if (simulation.success) {
+    console.log("Simulation successful!");
+    console.log(`Expected output: ${simulation.outputAmount}`);
+    
+    // Proceed with actual swap
+    const result = await vertigo.swap.swap({
+      inputMint,
+      outputMint,
+      amount,
+      options: { slippageBps: 100 },
+    });
+    
+    console.log(`Swap completed: ${result.signature}`);
+  } else {
+    console.error(`Simulation failed: ${simulation.error}`);
+  }
+}
+
+main();
+```
+
+## Example: Advanced usage with buildSwapTransaction()
+
+For advanced users who need full control over transaction building:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, LAMPORTS_PER_SOL, PublicKey, Transaction } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+import { NATIVE_MINT } from "@solana/spl-token";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  // Get a quote first
+  const quote = await vertigo.swap.getQuote({
+    inputMint: NATIVE_MINT,
+    outputMint: new PublicKey("<token-mint-address>"),
+    amount: LAMPORTS_PER_SOL,
+    slippageBps: 50,
+  });
+
+  // Build the transaction manually
+  const swapTx = await vertigo.swap.buildSwapTransaction(quote, {
+    priorityFee: "auto",
+    computeUnits: 200_000,
+  });
+
+  // You can now add more instructions to the transaction
+  // or modify it as needed before sending
   
+  // Sign and send
+  const signature = await connection.sendTransaction(swapTx, [walletKeypair.payer]);
+  await connection.confirmTransaction(signature, "confirmed");
+
+  console.log(`Transaction: ${signature}`);
+}
+
+main();
+```
+
+## Error Handling
+
+The SDK provides detailed error messages:
+
+```typescript
+try {
+  const result = await vertigo.swap.swap({
+    inputMint,
+    outputMint,
+    amount,
+    options: { slippageBps: 50 },
+  });
+  console.log(`Success: ${result.signature}`);
+} catch (error) {
+  if (error.code === "SLIPPAGE_EXCEEDED") {
+    console.error("Price moved too much. Try increasing slippage tolerance.");
+  } else if (error.code === "INSUFFICIENT_FUNDS") {
+    console.error("Not enough tokens in your account.");
+  } else if (error.code === "POOL_NOT_FOUND") {
+    console.error("No pool exists for this token pair.");
+  } else {
+    console.error(`Swap failed: ${error.message}`);
+  }
 }
 ```
 
+## Tips
+
+* Always get a quote before swapping to show users expected output
+* Use appropriate slippage tolerance (50-100 bps for normal conditions, higher for volatile tokens)
+* Set `priorityFee: "auto"` to ensure your transaction gets processed quickly
+* Use `simulateSwap()` when testing or for important transactions
+* The SDK automatically handles token account creation and SOL wrapping

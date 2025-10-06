@@ -4,222 +4,139 @@ description: How to sell tokens to a Vertigo pool
 
 # Sell Tokens
 
+{% hint style="info" %}
+**SDK v2 Update**: The v2 SDK uses a unified `swap()` method for both buying and selling. See the [Swap Tokens](buy-tokens.md) page for complete documentation.
+{% endhint %}
+
 ## Overview
 
-The SDK provides two methods for selling to Vertigo pools:
+In SDK v2, there is no separate "sell" method. Instead, you use the same `swap()` method and simply reverse the input/output mints:
 
-* `buildSellInstruction`  Build the sell instruction and send the transaction manually
-* `sell`  Build and send the sell transaction in one function call
-* `quoteSell`  For simulating a sell transaction before buying
+* **Buying tokens**: `inputMint = SOL`, `outputMint = TOKEN`
+* **Selling tokens**: `inputMint = TOKEN`, `outputMint = SOL`
 
-## When to use each method
+The SDK automatically detects the direction and handles all the necessary logic.
 
-* `sell`  is simpler to use and good for scripting use cases
-* `buildSellInstruction`  is useful when integrating into frontend applications or when you require more control (such as building multi-instruction transactions
-
-## Prerequisites
-
-* The `userTaB` account must be funded with MintB  in order for the transaction to succeed, or else the transaction will throw an InsufficientFunds error
-* The token programs must match the token program of their respective mint, or the transaction will throw an invalid token account error&#x20;
-
-## Required Parameters
-
-* **owner** - the public key of the of pool creator/owner
-* **user** - the key pair of the user performing the buy
-* **mintA** - the public key of MintA
-* **mintB** - the public key of MintB
-* **userTaA** - the pubic key of the user's token account for MintA
-* **userTaB** - the public key of the user's token account for MintB
-* **tokenProgramA** - the public key of the token program for MintA
-* **tokenProgramB** - the public key of the token program for MintB
-* **amount** - the amount of MintB tokens to sell
-* **limit** - the minimum amount of MintA you are willing to accept ( set to 0 for no limit )
-
-
-
-## Using sell()
+## Quick Example
 
 ```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-} from "@solana/web3.js";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import { NATIVE_MINT } from "@solana/spl-token";
 
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-
-// decimals of the mint in the pool
-const DECIMALS = 6
-
 async function main() {
-  // Connect to Solana
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-
-  // Load a wallet from a local file, or however you want to load a wallet
   const walletKeypair = anchor.Wallet.local();
 
-  // Initialize Anchor provider
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  // Initialize Vertigo SDK
-  const vertigo = new VertigoSDK(provider);
-
-  // address of the pool owner
-  const owner = new PublicKey("<owner-address>");
-
-  // addresses of the mints in the pool
-  const mintA = NATIVE_MINT;
-  const mintB = new PublicKey("<mint-address>");
-
-  // Load the Keypair of the user performing the sell transaction
-  const user = ...
-
-  // quantity of tokens to sell
-  const SELL_QUANTITY = 100_000; // 100,000 tokens
-
-  // Multiply by MintB decimals and convert to an BN (big number) type
-  const SELL_QUANTITY_BN = new anchor.BN(SELL_QUANTITY)
-      .mul(new anchor.BN(10 ** DECIMALS));
-
-  // fetch a sell quote
-  const quoteSell = await vertigo.quoteSell({
-    params: {
-      amount: SELL_QUANTITY_BN,
-      limit: new anchor.BN(0),
-    },
-    owner: owner,
-    user: user,
-    mintA,
-    mintB,
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
   });
 
-  console.log({
-    amountA: quoteSell.amountA.toString(),
-    feeA: quoteSell.feeA.toString(),
-  });
-
-  // check token balance before the transaction
-  const beforeBalance = await connection.getTokenAccountBalance(
-    new PublicKey("<user-taB-address>")
-  );
-
-  // execute the sell transaction
-  await vertigo.sell({
-    owner: owner,
-    mintA,
-    mintB,
-    user: user,
-    userTaA: new PublicKey("<user-taA-address>"),
-    userTaB: new PublicKey("<user-taB-address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    tokenProgramB: TOKEN_2022_PROGRAM_ID,
-    params: { 
-      // amount of MintB to sell for MintA tokens
-      amount: SELL_QUANTITY_BN,
-      limit: new anchor.BN(0),
-    }
-  });
-
-  // check token balance after the transaction
-  const afterBalance = await connection.getTokenAccountBalance(
-    new PublicKey("<user-taB-address>")
-  );
-  console.log(
-    `Tokens sold: ${
-      Number(beforeBalance.value.amount) - Number(afterBalance.value.amount)
-    }`
-  );
-}
-
-main();
-```
-
-
-
-
-
-## Using buildSellInstruction()
-
-```typescript
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-} from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
-import { NATIVE_MINT } from "@solana/spl-token";
-
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-
-// decimals of the mint in the pool
-const DECIMALS = 6
-
-async function main() {
-  // Connect to Solana
-  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-
-  // Load a wallet from a local file, or however you want to load a wallet
-  const walletKeypair = anchor.Wallet.local();
-
-  // Initialize Anchor provider
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  // Initialize Vertigo SDK
-  const vertigo = new VertigoSDK(provider);
-
-  // address of the pool owner
-  const owner = new PublicKey("<owner-address>");
-
-  // addresses of the mints in the pool
-  const mintA = NATIVE_MINT;
-  const mintB = new PublicKey("<mint-address>");
-
-  // Load the Keypair of the user performing the sell transaction
-  const user = ...
-
-  // quantity of MintB tokens to sell
-  const SELL_QUANTITY = 100_000;
-
-  // Multiply by MintB decimals and convert to an BN (big number) type
-  const SELL_QUANTITY_BN = new anchor.BN(SELL_QUANTITY)
-      .mul(new anchor.BN(10 ** DECIMALS));
-
-  const sellIx = await vertigo.buildSellInstruction({
-    owner: owner,
-    mintA,
-    mintB,
-    user: user,
-    userTaA: new PublicKey("<user-taA-address>"),
-    userTaB: new PublicKey("<user-taB-address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID,
-    tokenProgramB: TOKEN_2022_PROGRAM_ID,
-    params: { 
-      amount: SELL_QUANTITY_BN,
-      limit: new anchor.BN(0),
-    }
-  });
-
-  const tx = new Transaction().add(...sellIx);
-
-   // the second argument is to pass the required signer
-  const txHash = await provider.sendAndConfirm(tx, [user]);
+  const tokenMint = new PublicKey("<token-mint-address>");
+  const DECIMALS = 6;
   
-  console.log(`Sell tx: ${txHash}`);
+  // Sell 100,000 tokens for SOL
+  const sellAmount = 100_000 * (10 ** DECIMALS);
 
-  // check token balance after the transaction
-  const afterBalance = await connection.getTokenAccountBalance(
-    new PublicKey("<user-taB-address>")
-  );
-  console.log(
-    `Tokens sold: ${
-      Number(beforeBalance.value.amount) - Number(afterBalance.value.amount)
-    }`
-  );
+  // Get a quote first
+  const quote = await vertigo.swap.getQuote({
+    inputMint: tokenMint,     // Token you're selling
+    outputMint: NATIVE_MINT,  // SOL you're receiving
+    amount: sellAmount,
+    slippageBps: 50,          // 0.5% slippage
+  });
+
+  console.log(`Selling ${100_000} tokens`);
+  console.log(`Expected to receive: ~${quote.outputAmount / 1e9} SOL`);
+  console.log(`Minimum received: ${quote.minimumReceived / 1e9} SOL`);
+
+  // Execute the swap
+  const result = await vertigo.swap.swap({
+    inputMint: tokenMint,
+    outputMint: NATIVE_MINT,
+    amount: sellAmount,
+    options: {
+      slippageBps: 100,      // 1% slippage tolerance
+      priorityFee: "auto",   // Auto-calculate priority fee
+    },
+  });
+
+  console.log(`Swap successful!`);
+  console.log(`Sold tokens for ${result.outputAmount / 1e9} SOL`);
+  console.log(`Transaction: ${result.signature}`);
 }
 
 main();
 ```
+
+## Key Differences from v1
+
+### v1 (Old)
+```typescript
+// Separate sell method
+const tx = await vertigo.sell({
+  owner,
+  user,
+  mintA,
+  mintB,
+  userTaA,
+  userTaB,
+  tokenProgramA,
+  tokenProgramB,
+  params: { amount, limit }
+});
+```
+
+### v2 (New)
+```typescript
+// Unified swap method
+const result = await vertigo.swap.swap({
+  inputMint: tokenToSell,
+  outputMint: tokenToReceive,
+  amount,
+  options: { slippageBps: 100 }
+});
+```
+
+## Benefits of the Unified Interface
+
+1. **Simpler API** - One method instead of two
+2. **Automatic Direction Detection** - No need to worry about buy vs sell logic
+3. **Consistent Parameters** - Same interface for all swap types
+4. **Better Type Safety** - TypeScript knows exactly what you're doing
+5. **Cleaner Code** - Less boilerplate, more readable
+
+## Additional Features in v2
+
+The new swap interface includes several improvements:
+
+* **Automatic SOL wrapping** - No need to manually wrap/unwrap SOL
+* **Simulation support** - Test swaps before executing
+* **Priority fees** - Automatic or manual priority fee configuration
+* **Better error messages** - More specific error codes and messages
+* **Slippage protection** - Built-in slippage calculation and protection
+
+## Migration Guide
+
+If you're migrating from v1 `sell()` to v2 `swap()`:
+
+1. Replace `vertigo.sell()` with `vertigo.swap.swap()`
+2. Change parameter names:
+   - `mintB` → `inputMint` (token you're selling)
+   - `mintA` → `outputMint` (SOL or token you're receiving)
+   - `params.amount` → `amount`
+   - `params.limit` → Remove (use `slippageBps` instead)
+3. Remove manual token account parameters - SDK handles them automatically
+4. Add `options` object for slippage and other settings
+
+## Full Documentation
+
+For complete documentation on swapping (buying and selling), see the [Swap Tokens](buy-tokens.md) page.
+
+For more examples and advanced usage, refer to:
+* [Getting Started](getting-started.md) - SDK initialization
+* [Swap Tokens](buy-tokens.md) - Complete swap documentation with examples
+* [Claim Royalty Fees](claim-royalty-fees.md) - Claiming pool fees
