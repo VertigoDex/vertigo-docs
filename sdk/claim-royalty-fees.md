@@ -23,7 +23,7 @@ Pool owners can claim trading fees that have accumulated in their pools. The SDK
 **For `claimFees()`:**
 * **poolAddress** - The public key of the pool to claim fees from
 * **options** - (Optional) Transaction options:
-  * **priorityFee** - Priority fee strategy: "auto", "low", "medium", "high", or a specific amount
+  * **priorityFee** - Priority fee: "auto" for automatic calculation, or a specific number in micro-lamports
   * **commitment** - Transaction confirmation level (default: "confirmed")
 
 ## Example: Claim fees from a pool
@@ -81,7 +81,7 @@ async function main() {
 
   // Claim fees with custom priority fee
   const signature = await vertigo.pools.claimFees(poolAddress, {
-    priorityFee: "high", // Use high priority for faster confirmation
+    priorityFee: 10000, // 10,000 micro-lamports for faster confirmation
     commitment: "finalized", // Wait for finalized confirmation
   });
 
@@ -125,17 +125,21 @@ async function main() {
   
   // Get pool statistics including accumulated fees
   const stats = await vertigo.pools.getPoolStats(poolAddress);
-  console.log(`Accumulated fees: ${stats.accumulatedFees}`);
-  console.log(`Total volume: ${stats.totalVolume}`);
-
-  // Claim if there are fees to claim
-  if (stats.accumulatedFees > 0) {
-    const signature = await vertigo.pools.claimFees(poolAddress);
-    console.log(`Claimed ${stats.accumulatedFees} in fees`);
-    console.log(`Transaction: ${signature}`);
-  } else {
-    console.log("No fees to claim yet");
+  
+  if (!stats) {
+    console.error("Could not fetch pool stats");
+    return;
   }
+  
+  console.log(`24h fees: ${stats.fees24h.toString()}`);
+  console.log(`24h volume: ${stats.volume24h.toString()}`);
+  console.log(`TVL: ${stats.tvl.toString()}`);
+  console.log(`APY: ${stats.apy}%`);
+
+  // Claim accumulated fees
+  const signature = await vertigo.pools.claimFees(poolAddress);
+  console.log(`Fees claimed successfully!`);
+  console.log(`Transaction: ${signature}`)
 }
 
 main();

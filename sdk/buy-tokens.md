@@ -39,7 +39,7 @@ The SDK v2 provides a unified swap interface that automatically detects whether 
 * **amount** - The amount of input tokens to swap (in base units)
 * **options** - (Optional) Configuration object:
   * **slippageBps** - Slippage tolerance in basis points (default: 50 = 0.5%)
-  * **priorityFee** - Priority fee strategy: "auto", "low", "medium", "high", or a specific amount
+  * **priorityFee** - Priority fee: "auto" for automatic calculation, or a specific number in micro-lamports
   * **wrapSol** - Auto-wrap SOL if needed (default: true)
   * **simulateFirst** - Simulate before executing (default: true)
 

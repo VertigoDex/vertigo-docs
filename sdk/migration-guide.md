@@ -505,7 +505,7 @@ const signature = await vertigo.pools.claimFees(poolAddress);
 
 // With options
 const signature = await vertigo.pools.claimFees(poolAddress, {
-  priorityFee: "high",
+  priorityFee: "auto", // or a specific number like 10000
   commitment: "finalized",
 });
 ```
@@ -552,7 +552,12 @@ const poolAddress = vertigo.pools.getPoolAddress(owner, mintA, mintB);
 
 // Get pool statistics
 const stats = await vertigo.pools.getPoolStats(poolAddress);
-console.log(stats.totalVolume, stats.accumulatedFees);
+if (stats) {
+  console.log(`TVL: ${stats.tvl}`);
+  console.log(`24h Volume: ${stats.volume24h}`);
+  console.log(`24h Fees: ${stats.fees24h}`);
+  console.log(`APY: ${stats.apy}%`);
+}
 
 // Get all pools (with pagination)
 const allPools = await vertigo.pools.getAllPools();
