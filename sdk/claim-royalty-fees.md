@@ -22,6 +22,7 @@ Pool owners can claim trading fees that have accumulated in their pools. The SDK
 
 **For `claimFees()`:**
 * **poolAddress** - The public key of the pool to claim fees from
+* **destinationAccount** - (Optional) The token account to receive claimed fees. If not provided, the fees are sent to your wallet's associated token account for the pool's quote token
 * **options** - (Optional) Transaction options:
   * **priorityFee** - Priority fee: "auto" for automatic calculation, or a specific number in micro-lamports
   * **commitment** - Transaction confirmation level (default: "confirmed")
@@ -248,10 +249,10 @@ try {
 ## Understanding Royalty Fees
 
 * **Fee rate**: Set when creating the pool (e.g., 250 basis points = 2.5%)
-* **Accumulation**: Fees accumulate from each trade in the pool
+* **Accumulation**: Fees are collected separately from pool reserves with each trade (not stored in pool reserves)
 * **Claiming**: Only the pool owner can claim accumulated fees
 * **Frequency**: You can claim fees as often as you like
-* **Token type**: Fees are accumulated in the pool's base token (usually SOL)
+* **Token type**: Fees are accumulated in the pool's quote token (usually SOL)
 
 ## Tips
 
