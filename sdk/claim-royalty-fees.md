@@ -6,122 +6,264 @@ description: How to claim royalty fees from a Vertigo pool
 
 ## Overview
 
-The SDK provides two methods for claiming royalties from Vertigo pools:
+The SDK v2 provides a simplified method for claiming accumulated fees from your pools:
 
-* `buildClaimInstruction`  Builds the claim instruction only
-* `claim`  Builds and sends the claim transaction in a single function call
+* `claimFees()` - Claim all accumulated royalty fees from a pool
 
-## When to use each method
+Pool owners can claim trading fees that have accumulated in their pools. The SDK handles all the complexity of identifying the correct token accounts and building the transaction.
 
-* `claim`  is simpler to use and good for scripting use cases
-* `buildClaimInstruction`  is useful when integrating into frontend applications or when you require more control (such as building multi-instruction transactions
+## Prerequisites
 
-## Important
-
-* The token programs must match the token program of mintA, or the transaction will throw an invalid token account error&#x20;
-* If `receiverTaA` account does not exist, then an instruction will added to the transaction to create it
+* You must be the pool owner to claim fees
+* You must have a wallet configured (use `Vertigo.load()` instead of `Vertigo.loadReadOnly()`)
+* Fees must have accumulated in the pool from trading activity
 
 ## Parameters
 
-* **pool** - the public key of the of pool address
-* **claimer** - the key pair of the pool owner, which has the right to call claim()
-* **mintA** - the public key of MintA
-* **mintB** - the public key of MintB
-* **tokenProgramA**: the public key of the token program for MintA
-* **receiverTaA:** the public key of the token account for MintA that should receive the royalties
-* unwrap: (optional) This will add instructions to unwrap wSOL to SOL. Only applies to pools where MintA is wSOL
+**For `claimFees()`:**
+* **poolAddress** - The public key of the pool to claim fees from
+* **destinationAccount** - (Optional) The token account to receive claimed fees. If not provided, the fees are sent to your wallet's associated token account for the pool's quote token
+* **options** - (Optional) Transaction options:
+  * **priorityFee** - Priority fee: "auto" for automatic calculation, or a specific number in micro-lamports
+  * **commitment** - Transaction confirmation level (default: "confirmed")
 
-## Unwrapping wSOL to SOL
-
-This only applies to pools where MintA is wSOL (wrapped SOL). By default, the claim methods will send royalties in the form of wSOL to the user's token account for MintA. If you would like to unwrap wSOL to SOL in the same transaction, then you can set `unwrap` to true. Defaults to false.
-
-## Using claim()
+## Example: Claim fees from a pool
 
 ```typescript
-import {
-  Connection,
-  PublicKey,
-} from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
 
 async function main() {
   // Connect to Solana
-  const connection = new Connection("http://127.0.0.1:8899", "confirmed");
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
+  // Load wallet (must be the pool owner)
   const walletKeypair = anchor.Wallet.local();
 
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  const vertigo = new VertigoSDK(provider);
-
-  // load Keypair of the wallet that owns the pool
-  const owner = ...
-
-  // the address of the pool
-  const poolAddress = new PublicKey(<"pool-address>");
-  
-  const mintA = new PublicKey("<mintA address>");
-
-  // execute the transaction
-  await vertigo.claimRoyalties({
-    pool: poolAddress,
-    claimer: owner,
-    mintA,
-    receiverTaA: new PublicKey("<receiver TaA address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID 
+  // Initialize Vertigo SDK
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
   });
+
+  // The address of your pool
+  const poolAddress = new PublicKey("<pool-address>");
+
+  // Claim accumulated fees
+  const signature = await vertigo.pools.claimFees(poolAddress);
+
+  console.log(`Fees claimed successfully!`);
+  console.log(`Transaction: ${signature}`);
 }
 
 main();
 ```
 
-
-
-## Using buildClaimInstruction()
+## Example: Claim fees with custom options
 
 ```typescript
-import {
-  Connection,
-  PublicKey,
-} from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
 
 async function main() {
-  // Connect to Solana
-  const connection = new Connection("http://127.0.0.1:8899", "confirmed");
-
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
   const walletKeypair = anchor.Wallet.local();
 
-  const provider = new anchor.AnchorProvider(connection, walletKeypair);
-
-  const vertigo = new VertigoSDK(provider);
-
-  // load Keypair of the wallet that owns the pool
-  const owner = ...
-
-  // the address of the pool
-  const poolAddress = new PublicKey(<"pool-address>");
-  
-  const mintA = new PublicKey("<mintA address>");
-
-  // build the claim instruction(s). This returns an array
-  // as the SDK will add an insturction to create the userTaA 
-  // account if it does not exist
-  const claimIx = await vertigo.buildClaimInstruction({
-    pool: poolAddress,
-    claimer: owner,
-    mintA,
-    receiverTaA: new PublicKey("<receiver TaA address>"),
-    tokenProgramA: TOKEN_PROGRAM_ID
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
   });
-  
-  const tx = new anchor.web3.Transaction().add(...claimIx);
-  
-  // the second argument is to pass the required signer
-  const signature = await provider.sendAndConfirm(tx, [owner]);
+
+  const poolAddress = new PublicKey("<pool-address>");
+
+  // Claim fees with custom priority fee
+  const signature = await vertigo.pools.claimFees(poolAddress, {
+    priorityFee: 10000, // 10,000 micro-lamports for faster confirmation
+    commitment: "finalized", // Wait for finalized confirmation
+  });
+
+  console.log(`Fees claimed: ${signature}`);
 }
 
 main();
 ```
+
+## Example: Check fees before claiming
+
+Get pool data to see accumulated fees:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  const poolAddress = new PublicKey("<pool-address>");
+
+  // Get pool data to check accumulated fees
+  const pool = await vertigo.pools.getPool(poolAddress);
+  
+  if (!pool) {
+    console.error("Pool not found");
+    return;
+  }
+
+  console.log(`Pool owner: ${pool.owner.toBase58()}`);
+  console.log(`Fee rate: ${pool.feeRate / 100}%`);
+  
+  // Get pool statistics including accumulated fees
+  const stats = await vertigo.pools.getPoolStats(poolAddress);
+  
+  if (!stats) {
+    console.error("Could not fetch pool stats");
+    return;
+  }
+  
+  console.log(`24h fees: ${stats.fees24h.toString()}`);
+  console.log(`24h volume: ${stats.volume24h.toString()}`);
+  console.log(`TVL: ${stats.tvl.toString()}`);
+  console.log(`APY: ${stats.apy}%`);
+
+  // Claim accumulated fees
+  const signature = await vertigo.pools.claimFees(poolAddress);
+  console.log(`Fees claimed successfully!`);
+  console.log(`Transaction: ${signature}`)
+}
+
+main();
+```
+
+## Example: Claim from multiple pools
+
+If you own multiple pools, you can claim fees from all of them:
+
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+import { Connection, PublicKey } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+
+async function main() {
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+  const walletKeypair = anchor.Wallet.local();
+
+  const vertigo = await Vertigo.load({
+    connection,
+    wallet: walletKeypair,
+    network: "devnet",
+  });
+
+  // List of your pool addresses
+  const poolAddresses = [
+    new PublicKey("<pool-address-1>"),
+    new PublicKey("<pool-address-2>"),
+    new PublicKey("<pool-address-3>"),
+  ];
+
+  // Claim fees from each pool
+  for (const poolAddress of poolAddresses) {
+    try {
+      const signature = await vertigo.pools.claimFees(poolAddress);
+      console.log(`Claimed fees from ${poolAddress.toBase58()}: ${signature}`);
+    } catch (error) {
+      console.error(`Failed to claim from ${poolAddress.toBase58()}: ${error.message}`);
+    }
+  }
+}
+
+main();
+```
+
+## Migration from v1
+
+### v1 (Old)
+```typescript
+import { VertigoSDK } from "@vertigo-amm/vertigo-sdk";
+import * as anchor from "@coral-xyz/anchor";
+
+const provider = new anchor.AnchorProvider(connection, wallet);
+const vertigo = new VertigoSDK(provider);
+
+await vertigo.claimRoyalties({
+  pool: poolAddress,
+  claimer: owner,
+  mintA,
+  receiverTaA: receiverTokenAccount,
+  tokenProgramA: TOKEN_PROGRAM_ID,
+  unwrap: true,
+});
+```
+
+### v2 (New)
+```typescript
+import { Vertigo } from "@vertigo-amm/vertigo-sdk";
+
+const vertigo = await Vertigo.load({
+  connection,
+  wallet,
+  network: "devnet",
+});
+
+await vertigo.pools.claimFees(poolAddress);
+```
+
+## Key Improvements in v2
+
+1. **Simplified interface** - No need to specify mints, token programs, or accounts
+2. **Automatic handling** - SDK handles all token account lookups and creation
+3. **Owner verification** - Automatically verifies you own the pool
+4. **Better errors** - Clear error messages if pool doesn't exist or you're not the owner
+5. **Type safety** - Full TypeScript support
+
+## Error Handling
+
+```typescript
+try {
+  const signature = await vertigo.pools.claimFees(poolAddress);
+  console.log(`Success: ${signature}`);
+} catch (error) {
+  if (error.message.includes("Wallet not connected")) {
+    console.error("Please connect a wallet first");
+  } else if (error.message.includes("Pool not found")) {
+    console.error("Pool does not exist or address is incorrect");
+  } else if (error.message.includes("not the pool owner")) {
+    console.error("You must be the pool owner to claim fees");
+  } else {
+    console.error(`Claim failed: ${error.message}`);
+  }
+}
+```
+
+## Understanding Royalty Fees
+
+* **Fee rate**: Set when creating the pool (e.g., 250 basis points = 2.5%)
+* **Accumulation**: Fees are collected separately from pool reserves with each trade (not stored in pool reserves)
+* **Claiming**: Only the pool owner can claim accumulated fees
+* **Frequency**: You can claim fees as often as you like
+* **Token type**: Fees are accumulated in the pool's quote token (usually SOL)
+
+## Tips
+
+* Check pool statistics before claiming to see if there are fees worth claiming
+* Consider transaction costs - claiming small amounts may not be profitable
+* You can batch multiple claims if you own multiple pools
+* Use appropriate priority fees during high network congestion
+* The SDK automatically handles SOL wrapping/unwrapping as needed
+
+## Related Documentation
+
+* [Swap Tokens](buy-tokens.md) - Trading generates the fees you claim
+* [Token Factories](token-factories.md) - Creating pools with custom fee rates
+* [Getting Started](getting-started.md) - SDK initialization

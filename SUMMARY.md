@@ -18,11 +18,12 @@
 * [Getting Started](for-launchpads/getting-started.md)
 * [Launchpad Setup](for-launchpads/launchpad-setup.md)
 
-## SDK
+## SDK v2
 
 * [Getting started](sdk/getting-started.md)
-* [Buy Tokens](sdk/buy-tokens.md)
-* [Sell Tokens](sdk/sell-tokens.md)
+* [Migration Guide (v1 → v2)](sdk/migration-guide.md)
+* [Swap Tokens](sdk/buy-tokens.md)
+* [Sell Tokens (Legacy)](sdk/sell-tokens.md)
 * [Claim Royalty Fees](sdk/claim-royalty-fees.md)
 * [Token Factories](sdk/token-factories.md)
 
