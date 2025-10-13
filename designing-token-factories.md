@@ -1,21 +1,33 @@
 ---
-description: Creating your own Token Factory progrmas
+description: Creating your own Token Factory programs
 ---
 
 # Designing Token Factories
 
 ## Token Factories
 
-Token Factories are Solana Programs that allow you to create tokens and pools with preset parameters. When launching pools/tokens, it is recommended to use a Token Factory instead of launching a pool directly.&#x20;
+Token Factories are Solana Programs that allow you to create tokens and pools with preset parameters. They are particularly useful for launchpads and token creation platforms.
 
-Vertigo provides two Token Factory programs:
+Vertigo provides two reference Token Factory programs that you can fork and customize:
 
-* SPL Token Factory: for launching pools and tokens that use the SPL token program
-* Token-2022 Token Factory: for launching pools with tokens that use the Token-2022 token program
+* **SPL Token Factory**: For launching pools and tokens that use the SPL token program
+* **Token-2022 Token Factory**: For launching pools with tokens that use the Token-2022 token program
 
-## Customizing token factories
+{% hint style="info" %}
+**Note**: The Vertigo SDK v3 focuses on core AMM functionality (swapping, pool creation, fee claims). For token factories, you'll need to interact with the factory programs directly using Anchor or fork and deploy your own customized version.
+{% endhint %}
 
-Vertigo's token factory programs might be sufficient, but most users will want to customize the functionality of their programs. To do that, we recommend forking Vertigo's factory programs and creating your own.
+## Why Create a Custom Token Factory?
+
+Vertigo's reference factory programs provide basic functionality, but most launchpads and platforms will want to customize:
+
+- Token launch mechanics and timing
+- Fee structures and distribution
+- Sniper protection parameters
+- Initial liquidity settings
+- Access controls and permissions
+
+To do this, we recommend forking Vertigo's factory programs and creating your own.
 
 ### Designing a Token Factory: A Step-by-Step Guide
 

@@ -5,17 +5,17 @@ description: How to sell tokens to a Vertigo pool
 # Sell Tokens
 
 {% hint style="info" %}
-**SDK v2 Update**: The v2 SDK uses a unified `swap()` method for both buying and selling. See the [Swap Tokens](buy-tokens.md) page for complete documentation.
+**SDK v3 Update**: The v3 SDK uses a unified `swap()` method for both buying and selling. See the [Swap Tokens](buy-tokens.md) page for complete documentation.
 {% endhint %}
 
 ## Overview
 
-In SDK v2, there is no separate "sell" method. Instead, you use the same `swap()` method and simply reverse the input/output mints:
+In SDK v3, there is no separate "sell" method. Instead, you use the same `swap()` method and simply reverse the input/output mints:
 
 * **Buying tokens**: `inputMint = SOL`, `outputMint = TOKEN`
 * **Selling tokens**: `inputMint = TOKEN`, `outputMint = SOL`
 
-The SDK automatically detects the direction and handles all the necessary logic.
+The SDK automatically detects the direction from the pool configuration and your input/output mints, and handles all the necessary logic.
 
 ## Quick Example
 
@@ -27,22 +27,24 @@ import { NATIVE_MINT } from "@solana/spl-token";
 
 async function main() {
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-  const walletKeypair = anchor.Wallet.local();
+  const wallet = new anchor.Wallet(keypair);
 
   const vertigo = await Vertigo.load({
     connection,
-    wallet: walletKeypair,
+    wallet,
     network: "devnet",
   });
 
-  const tokenMint = new PublicKey("<token-mint-address>");
+  const poolAddress = new PublicKey("pool-address");
+  const tokenMint = new PublicKey("token-mint-address");
   const DECIMALS = 6;
   
   // Sell 100,000 tokens for SOL
   const sellAmount = 100_000 * (10 ** DECIMALS);
 
   // Get a quote first
-  const quote = await vertigo.swap.getQuote({
+  const quote = await vertigo.quote({
+    pool: poolAddress,
     inputMint: tokenMint,     // Token you're selling
     outputMint: NATIVE_MINT,  // SOL you're receiving
     amount: sellAmount,
@@ -54,14 +56,13 @@ async function main() {
   console.log(`Minimum received: ${quote.minimumReceived / 1e9} SOL`);
 
   // Execute the swap
-  const result = await vertigo.swap.swap({
+  const result = await vertigo.swap({
+    pool: poolAddress,
     inputMint: tokenMint,
     outputMint: NATIVE_MINT,
     amount: sellAmount,
-    options: {
-      slippageBps: 100,      // 1% slippage tolerance
-      priorityFee: "auto",   // Auto-calculate priority fee
-    },
+    slippageBps: 100,      // 1% slippage tolerance
+    priorityFee: 10000,    // 10k micro-lamports
   });
 
   console.log(`Swap successful!`);
@@ -72,28 +73,12 @@ async function main() {
 main();
 ```
 
-## Key Differences from v1
+## Key Differences from v2
 
-### v1 (Old)
+### v2 (Old)
 ```typescript
-// Separate sell method
-const tx = await vertigo.sell({
-  owner,
-  user,
-  mintA,
-  mintB,
-  userTaA,
-  userTaB,
-  tokenProgramA,
-  tokenProgramB,
-  params: { amount, limit }
-});
-```
-
-### v2 (New)
-```typescript
-// Unified swap method
-const result = await vertigo.swap.swap({
+// Had to use swap client
+const result = await client.swap.swap({
   inputMint: tokenToSell,
   outputMint: tokenToReceive,
   amount,
@@ -101,36 +86,72 @@ const result = await vertigo.swap.swap({
 });
 ```
 
+### v3 (New)
+```typescript
+// Direct method on client, requires pool address
+const result = await vertigo.swap({
+  pool: poolAddress,      // Now required
+  inputMint: tokenToSell,
+  outputMint: tokenToReceive,
+  amount,
+  slippageBps: 100,
+});
+```
+
 ## Benefits of the Unified Interface
 
-1. **Simpler API** - One method instead of two
-2. **Automatic Direction Detection** - No need to worry about buy vs sell logic
+1. **Simpler API** - One method for both directions
+2. **Automatic Direction Detection** - SDK figures out buy vs sell from pool + mints
 3. **Consistent Parameters** - Same interface for all swap types
 4. **Better Type Safety** - TypeScript knows exactly what you're doing
 5. **Cleaner Code** - Less boilerplate, more readable
+6. **No Fake Quotes** - No need to construct quote objects to build transactions
 
-## Additional Features in v2
+## Additional Features in v3
 
 The new swap interface includes several improvements:
 
 * **Automatic SOL wrapping** - No need to manually wrap/unwrap SOL
-* **Simulation support** - Test swaps before executing
-* **Priority fees** - Automatic or manual priority fee configuration
-* **Better error messages** - More specific error codes and messages
+* **Priority fees** - Configure priority fees for faster confirmation
+* **Better error messages** - More specific error information
 * **Slippage protection** - Built-in slippage calculation and protection
+* **Layered architecture** - Choose your level of control (Instructions → Helpers → Client)
 
 ## Migration Guide
 
-If you're migrating from v1 `sell()` to v2 `swap()`:
+If you're migrating from v2 `swap.swap()` to v3 `swap()`:
 
-1. Replace `vertigo.sell()` with `vertigo.swap.swap()`
-2. Change parameter names:
-   - `mintB` → `inputMint` (token you're selling)
-   - `mintA` → `outputMint` (SOL or token you're receiving)
-   - `params.amount` → `amount`
-   - `params.limit` → Remove (use `slippageBps` instead)
-3. Remove manual token account parameters - SDK handles them automatically
-4. Add `options` object for slippage and other settings
+1. Replace `client.swap.swap()` with `vertigo.swap()`
+2. Add `pool` parameter (required in v3)
+3. Move options out of nested object:
+   - `options.slippageBps` → `slippageBps`
+   - `options.priorityFee` → `priorityFee`
+4. Remove `"auto"` priority fee option (provide explicit value or use default)
+
+**v2:**
+```typescript
+const result = await client.swap.swap({
+  inputMint: TOKEN,
+  outputMint: SOL,
+  amount,
+  options: {
+    slippageBps: 100,
+    priorityFee: "auto"
+  }
+});
+```
+
+**v3:**
+```typescript
+const result = await vertigo.swap({
+  pool: poolAddress,    // New required parameter
+  inputMint: TOKEN,
+  outputMint: SOL,
+  amount,
+  slippageBps: 100,     // Flattened from options
+  priorityFee: 10000,   // Explicit value, no "auto"
+});
+```
 
 ## Full Documentation
 
@@ -140,3 +161,4 @@ For more examples and advanced usage, refer to:
 * [Getting Started](getting-started.md) - SDK initialization
 * [Swap Tokens](buy-tokens.md) - Complete swap documentation with examples
 * [Claim Royalty Fees](claim-royalty-fees.md) - Claiming pool fees
+* [Migration Guide](migration-guide.md) - Full v2 to v3 migration guide

@@ -3,7 +3,7 @@
 The Vertigo launch stack is the new meta for token creation on Solana. We designed our systems from the ground up to be easy to use and **sniper-proof**.
 
 {% hint style="info" %}
-**SDK v2 Released!** We've completely redesigned the Vertigo SDK for better developer experience, simpler APIs, and powerful new features. See the [SDK Getting Started](sdk/getting-started.md) guide to learn more.
+**SDK v3 Released!** We've completely redesigned the Vertigo SDK for simplicity, clarity, and better developer experience. See the [SDK Getting Started](sdk/getting-started.md) guide to learn more.
 {% endhint %}
 
 **Vertigo** pools were created with a simple set of requirements:
