@@ -301,4 +301,3 @@ const result = await vertigo.swap({
 
 - Learn about [pool creation](../launch-a-pool.md)
 - Check out [claiming fees](claim-royalty-fees.md)
-- Explore [token factories](token-factories.md)

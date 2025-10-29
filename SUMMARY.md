@@ -25,11 +25,9 @@
 * [Swap Tokens](sdk/buy-tokens.md)
 * [Sell Tokens (Legacy)](sdk/sell-tokens.md)
 * [Claim Royalty Fees](sdk/claim-royalty-fees.md)
-* [Token Factories](sdk/token-factories.md)
 
 ***
 
-* [Designing Token Factories](designing-token-factories.md)
 * [Launch a pool](launch-a-pool.md)
 
 ## API

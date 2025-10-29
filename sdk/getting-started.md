@@ -242,7 +242,7 @@ const result = await retry(() => fetchData(), { maxRetries: 3 });
 // Get explorer links
 const url = getExplorerUrl(signature, "mainnet", "solscan");
 
-// Create token metadata for token factories
+// Create token metadata
 const metadata = createTokenMetadata(
   "My Token",
   "MYTKN",

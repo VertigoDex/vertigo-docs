@@ -197,6 +197,5 @@ try {
 ## Related Documentation
 
 * [Swap Tokens](buy-tokens.md) - Trading generates the fees you claim
-* [Token Factories](token-factories.md) - Creating pools with custom fee rates
 * [Getting Started](getting-started.md) - SDK initialization
 * [Migration Guide](migration-guide.md) - Upgrading from v2
